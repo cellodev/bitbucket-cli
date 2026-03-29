@@ -15,6 +15,35 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
+### Getting an OAuth access token
+
+Create an **OAuth consumer** on your Bitbucket workspace (callback URL e.g. `https://localhost:3000/callback`) and note the **Key** and **Secret**.
+
+Some challenge materials still mention opening the authorize URL with `response_type=token` and reading the token from the URL fragment. **Bitbucket Cloud often rejects that** (`unsupported_response_type` / “Must be one of: **code**”). In that case use the **authorization code** flow from the same documentation:
+
+1. Sign in to Bitbucket in the browser, then open (replace `YOUR_KEY`):
+
+   `https://bitbucket.org/site/oauth2/authorize?client_id=YOUR_KEY&response_type=code`
+
+   If authorization fails without a redirect URI, append the same callback you configured on the consumer, URL-encoded, for example:
+
+   `&redirect_uri=https%3A%2F%2Flocalhost%3A3000%2Fcallback`
+
+2. After you approve the app, Bitbucket redirects to your callback. The browser may show “connection refused” on `localhost` if nothing is listening there—that is fine. Copy the **`code`** query parameter from the address bar (`?code=...`).
+
+3. Exchange the code for tokens (run locally; do not commit Key/Secret):
+
+   ```bash
+   curl -sS -X POST -u 'YOUR_KEY:YOUR_SECRET' \
+     https://bitbucket.org/site/oauth2/access_token \
+     -d grant_type=authorization_code \
+     -d code='PASTE_CODE_HERE'
+   ```
+
+   Use the `access_token` value from the JSON response. Tokens expire in about **two hours**; the response may include a `refresh_token`—see [Use OAuth on Bitbucket Cloud](https://support.atlassian.com/bitbucket-cloud/docs/use-oauth-on-bitbucket-cloud/) for refresh.
+
+This CLI only needs a **Bearer** token (`BITBUCKET_TOKEN`); it does not run the OAuth browser flow for you.
+
 Export credentials (recommended):
 
 ```bash
@@ -95,6 +124,7 @@ Tests use **no network**: `httpx.MockTransport` and lightweight fakes exercise t
 - **Repository permissions:** Implemented with [`permissions-config/users`](https://developer.atlassian.com/cloud/bitbucket/new-repo-permission-apis/) (`PUT` / `DELETE`), which matches “add/remove users” in the sense of **repository access**. Workspace-level invites are a different product surface; the challenge maps cleanly to explicit repo permissions.
 - **Branch rule:** Implemented as documented **exemptions** on a `push` restriction (`users` on the rule are allowed to push; others are not). Alternative interpretations (e.g. only tweaking required-approvals rules) would use different `kind` values and are not equivalent on the API.
 - **Configuration:** Environment variables first, optional CLI overrides for demos—no silent `.env` loading.
+- **OAuth:** The tool expects an access token in the environment; obtaining that token is a separate step (browser + `curl` today). That matches the challenge’s “get a token” tip and keeps the codebase small; Bitbucket’s authorize endpoint may only support `response_type=code`, even where older docs still mention `token` in the URL.
 
 ## References
 
